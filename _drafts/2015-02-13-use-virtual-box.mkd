@@ -1,0 +1,161 @@
+---
+layout: post
+title:  "Parametrez votre réseau Virtual Box"
+date:   2015-02-13 14:52:58
+categories: linux network
+
+---
+
+L'idée !
+--------
+
+Avec Virtual Box, pour aller au plus simple, nous sommes habitués à utiliser un
+paramétrage réseau classique : La machine virtuelle est paramétrée pour utiliser
+une seule interface (en général eth0) qui est tout simplement un 'pont' vers la
+carte réseau de l'ordinateur. C'est rapide est c'est la configuration classique,
+pratique pour chez sois ! Avantages : Pas de configuration à faire. La machine
+virtuelle se voit attribuer une adresse IP par votre routeur ou boitier DSL et
+tout fonctionne.
+
+Inconvénient :
+
+-   Vous exposez les services de votre machine virtuelle sur votre réseau, comme
+    vous le feriez avec votre ordinateur. Coté sécurité, il serait préférable
+    pour une VM de dev d'avoir certains services uniquement accessible depuis
+    votre machine (SSH, partages réseau, serveur de dev local, bases de données,
+    relais SMTP...).
+
+-   Si votre réseau ne fonctionne plus (pas d'accès wifi, cable débranché),
+    votre machine virtuelle est innaccessible (en dehors de la console Virtual
+    Box). Noter que dans certains cas, cela peux empecher votre VM de démarrer
+    correctement sans intervention de votre part.
+
+
+Objectifs
+---------
+
+-   Assurer que la VM serra accessible indépendamment de la disponibilité de
+    votre réseau (il est même possible de ne pas avoir de carte réseau).
+
+-   Reserver les services sensibles de votre VM (relais SMTP, SSH, Partages
+    NFS/SMB, etc..) pour votre ordinateur. Vous seul devez pouvoir y acceder et
+    pas votre voisin hacker.
+
+Comment faire ? La solution s'appel dans le jargon de Virtual Box : Host-Only
+Network. C'est un réseau privé (généralement en 10.x.x.x) que seul votre
+ordinateur pourra voir et utiliser.
+
+Du coup, votre machine virtuelle ne pourra se connecter à internet que grâce à
+une seconde interface réseau, qui pointera ce coup-ci vers votre carte réseau
+physique. On pourra, au choix :
+
+1. Soit utiliser un 'pont' vers l'une de vos cartes réseau (cable / wifi) qui
+fera croire que la machine virtuelle est directement reliée sur votre réseau :
+La machine virtuelle sera vu comme n'importe quel ordinateur. C'est une solution
+simple *si* vous parametrez les services sensibles de votre VM pour utiliser
+uniquement le réseau privé. Dans l'idéal, aucun service ne devrait être
+accessible sur cette interface.
+
+2. Soit utiliser un accès NAT. Le principe est d'isoler la machine virtuelle sur
+un réseau interne invisible depuis internet. Principal inconvénien si vous
+souhaitez une mise en route rapide : Il sera impossible de se connecter à la
+machine directement sans passer par une technique dite de "Port Forwarding".
+Idéal pour proteger vos machines (votre ordinateur utilise surement une IP
+translatée en 192.168.x.x), cette méthode à l'avantage de rendre caduc le
+recours au 'Host-only network' et de se suffir à elle-seule. En revanche elle
+est peu pratique pour une mise en route rapide et nécessite des manipulations à
+chaque nouveau service ajouté sur votre machine virtuelle.
+
+Dans notre exemple, pour rester simple, je vais donc utiliser uniquement la 1ère
+solution pour l'accès internet. A vous d'être rigoureux dans vos paramètrages.
+
+
+Prérequis
+---------
+
+Il vous faut Virtual Box et une machine virtuelle (VM) déjà prêt d'emploi.
+J'utilise surtout Linux, alors l'exemple sera prévu pour cette plateforme
+(Ubuntu plus exactement).
+
+
+Comment procéder
+----------------
+
+Apperçu des étapes :
+
+1.  Créer une interface virtuelle donnant accès à un réseau privé 10.x.x.x
+
+2.  Parametrer la VM pour accèder en eth0 au réseau privé et en eth1 au réseau
+    publique (en général, sur un réseau interne en 192.168.x.x).
+
+3.  Paramétrer les services sensibles de votre VM pour utiliser le réseau privé.
+
+
+Réseau 'Host Only'
+------------------
+
+Ce type de réseau utilise une inferface logique qui fait croire qu'on a une
+carte réseau physique sur ça machine. Cette nouvelle interface se parametre
+comme ceci :
+
+Depuis les préférences de Virtual Box, onglet *Network*
+
+**Pour créer une nouvelle interface réseau** :
+
+1.  Onglet 'Host-only Networks'
+2.  Cliquer sur Ajouter (icône avec un + à droite de la liste)
+3.  Saisissez un nom (celui par défaut est très bien)
+
+**Paramètrages de l'interface**
+
+Onglet 'Adapter'
+
+Définit comment votre machine sera identifiée sur ce nouveau réseau. Il s'agit
+ici de votre *vrai* machine, et non les éventuelles machines virtuelles. L'idée
+est de parametrer un réseau 10.0.0.x (plage reservée pour les réseaux privés
+virtuels).
+
+1.  Adresse IPv4 : Tapez 10.0.0.2  
+    Cette adresse sera celle que votre ordinateur aura lorsqu'il va tenter de se
+    connecter aux machines virtuelles.
+
+2.  IPv4 Network Mask : Tapez 255.0.0.0  
+    Ici, on aura qu'un grand réseau en 10.x.x.x
+
+> Inutile de renseigner les informations pour les adresses IPv6, sauf si vous
+> avez besoin de faire des tests spécifiques dessus.
+
+
+Onglet 'DHCP Server'
+
+Ici, on va indiquer que Virtual Box doit démarrer un service DHCP sur ce réseau
+virtuel. Les machines virtuelles utilisent en général le service DHCP de leur
+réseau pour obtenir une configuration IP. Sinon, il faudra indiquer des adresses
+statiques, mais on va rester simple ici.
+
+1.  Activer le serveur DHCP (case à cocher)
+2.  Server Address : Tapez l'adresse du serveur DHCP. Engénéral, on choisi
+    10.0.0.1
+3.  Server Mask : Soyez cohérent avec votre premier onglet et taper
+    255.0.0.0 (toujours notre grand réseau en 10.x.x.x)
+4.  Lower Address Bound et Upper Address Bound représente la 1ère et la dernière
+    adresse IP qui sera allouée de façon automatique. Indiquez ici 10.0.0.10 et
+    10.0.0.20 pour disposer de 10 adresses allouées automatiquement. Au delà de
+    10.0.0.20, il faudra faire des attributions statiques (depuis vos machines
+    virtuelles).
+
+
+**Paramètrage de la VM**
+
+Depuis les paramètres de votre Machine Virtuelle, onglet 'Network', inidiquez
+les paramètres suivants :
+
+- Adapter 1 : **Attached_to** indique 'Host-only Adapter' et le **name** doit
+  pointer sur l'interface virtuelle qu'on a créé précédemment. Vérifiez que la
+  case 'Cable Connected' est bien cochée.
+
+- Adapter 2 : **Attached_to** indique 'Bridged Adapter'. Le **name** doit
+  pointer sur l'une de vos cartes réseau. Ainsi, la VM pourra acceder à Internet
+  si votre ordinateur y a accès.
+
+
